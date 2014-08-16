@@ -24,10 +24,12 @@
 #include <time.h>
 #include <stdlib.h>
 #include "waveforms.h"
+#include <unistd.h>
 
 #define RT_LENGTH 64
 #define PS_LENGTH 8
 #define GROUP_LENGTH 4
+
 
 struct {
     char ps[PS_LENGTH];
@@ -59,14 +61,13 @@ uint16_t crc(uint16_t block) {
     for(int j=0; j<BLOCK_SIZE; j++) {
         int bit = (block & MSB_BIT) != 0;
         block <<= 1;
-
-        int msb = (crc >> (POLY_DEG-1)) & 1;
+        
+	int msb = (crc >> (POLY_DEG-1)) & 1;
         crc <<= 1;
         if((msb ^ bit) != 0) {
             crc = crc ^ POLY;
         }
     }
-    
     return crc;
 }
 
@@ -102,7 +103,7 @@ int get_rds_ct_group(uint16_t *blocks) {
         blocks[3] |= abs(offset);
         if(offset < 0) blocks[3] |= 0x20;
         
-        //printf("Generated CT: %04X %04X %04X\n", blocks[1], blocks[2], blocks[3]);
+        //printf("Generated CT: %04X %04X %04X %04X\n", blocks[0], blocks[1], blocks[2], blocks[3]);
         return 1;
     } else return 0;
 }
@@ -120,24 +121,50 @@ void get_rds_group(int *buffer) {
     
     // Generate block content
     if(! get_rds_ct_group(blocks)) { // CT (clock time) has priority on other group types
-        if(state < 4) {
-            blocks[1] = 0x0000 | ps_state;
-            blocks[2] = 0xCDCD;     // no AF
-            blocks[3] = rds_params.ps[ps_state*2]<<8 | rds_params.ps[ps_state*2+1];
-            ps_state++;
-            if(ps_state >= 4) ps_state = 0;
-        } else { // state == 5
-            blocks[1] = 0x2000 | rt_state;
-            blocks[2] = rds_params.rt[rt_state*4+0]<<8 | rds_params.rt[rt_state*4+1];
-            blocks[3] = rds_params.rt[rt_state*4+2]<<8 | rds_params.rt[rt_state*4+3];
-            rt_state++;
-            if(rt_state >= 16) rt_state = 0;
-        }
-    
+        if(state == 1 || state == 3) {
+		// 0B
+		blocks[1] = 0x0000 | ps_state;
+		blocks[2] = 0xCDCD;     // no AF
+		blocks[3] = rds_params.ps[ps_state*2]<<8 | rds_params.ps[ps_state*2+1];
+		ps_state++;
+		if(ps_state >= 4) ps_state = 0;
+        } else if (state == 2 || state == 4 || state == 5 || state == 6) {
+		// 2A
+		blocks[1] = 0x2000 | rt_state;
+		blocks[2] = rds_params.rt[rt_state*4+0]<<8 | rds_params.rt[rt_state*4+1];
+		blocks[3] = rds_params.rt[rt_state*4+2]<<8 | rds_params.rt[rt_state*4+3];
+		rt_state++;
+		if(rt_state >= 16) rt_state = 0;
+	} else if (state == 7) {
+		// 3A
+		blocks[1] = 0x3430;
+		blocks[2] = 0x0474;
+		blocks[3] = 0xCD46;
+	} else if (state == 8 || state == 9) {
+		// 8A
+		blocks[1] = 0x8421;
+		blocks[2] = 0xDEA5;
+		blocks[3] = 0xA051;
+	} else if (state == 10 || state == 11 ) {
+		// 8A
+		blocks[1] = 0x8421;
+		blocks[2] = 0x4E91;
+		blocks[3] = 0x9200;
+	//} else if (state == 12 || state == 13 ) {
+	//	blocks[1] = 0x8421;
+	//	blocks[2] = 0x51D0;
+	//	blocks[3] = 0xF7D2;
+	} else if (state == 14) {
+		// 3A
+		blocks[1] = 0x3430;
+		blocks[2] = 0x4260;
+		blocks[3] = 0xCD46;
+	}
         state++;
-        if(state >= 5) state = 0;
-    }
-    
+        if(state >= 15) state = 0;
+
+    } 
+
     // Calculate the checkword for each block and emit the bits
     for(int i=0; i<GROUP_LENGTH; i++) {
         uint16_t block = blocks[i];
@@ -179,9 +206,10 @@ void get_rds_samples(float *buffer, int count) {
                 get_rds_group(bit_buffer);
                 bit_pos = 0;
             }
-            
             // do differential encoding
             cur_bit = bit_buffer[bit_pos];
+	    // REGEL
+	    //printf("%d", cur_bit);
             prev_output = cur_output;
             cur_output = prev_output ^ cur_bit;
             
@@ -234,6 +262,7 @@ void set_rds_pi(uint16_t pi_code) {
 void set_rds_rt(char *rt) {
     strncpy(rds_params.rt, rt, 64);
     for(int i=0; i<64; i++) {
+	// If i is 0, the set it to 32. Dec 32 is ASCII space
         if(rds_params.rt[i] == 0) rds_params.rt[i] = 32;
     }
 }

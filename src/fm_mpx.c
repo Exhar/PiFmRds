@@ -108,7 +108,6 @@ int fm_mpx_open(char *filename, size_t len) {
         downsample_factor = 228000. / in_samplerate;
     
         printf("Input: %d Hz, upsampling factor: %.2f\n", in_samplerate, downsample_factor);
-
         channels = sfinfo.channels;
         if(channels > 1) {
             printf("%d channels, generating stereo multiplex.\n", channels);
@@ -161,9 +160,7 @@ int fm_mpx_open(char *filename, size_t len) {
 // 10 after.
 int fm_mpx_get_samples(float *mpx_buffer) {
     get_rds_samples(mpx_buffer, length);
-
     if(inf  == NULL) return 0; // if there is no audio, stop here
-    
     for(int i=0; i<length; i++) {
         if(audio_pos >= downsample_factor) {
             audio_pos -= downsample_factor;

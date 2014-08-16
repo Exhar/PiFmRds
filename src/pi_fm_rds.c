@@ -272,7 +272,6 @@ map_peripheral(uint32_t base, uint32_t len)
 int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt, int16_t ppm, char *control_pipe) {
     int i, fd, pid;
     char pagemap_fn[64];
-
     // Catch all signals possible - it is vital we kill the DMA engine
     // on process exit!
     for (i = 0; i < 64; i++) {
@@ -282,7 +281,6 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
         sa.sa_handler = terminate;
         sigaction(i, &sa, NULL);
     }
-        
     dma_reg = map_peripheral(DMA_BASE, DMA_LEN);
     pwm_reg = map_peripheral(PWM_BASE, PWM_LEN);
     clk_reg = map_peripheral(CLK_BASE, CLK_LEN);
@@ -306,7 +304,7 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
         fatal("Failed to open %s: %m\n", pagemap_fn);
     if (lseek(fd, (unsigned long)virtbase >> 9, SEEK_SET) != (unsigned long)virtbase >> 9)
         fatal("Failed to seek on %s: %m\n", pagemap_fn);
-//    printf("Page map:\n");
+    //printf("Page map:\n");
     for (i = 0; i < NUM_PAGES; i++) {
         uint64_t pfn;
         page_map[i].virtaddr = virtbase + i * PAGE_SIZE;
@@ -317,9 +315,8 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
         if (((pfn >> 55)&0xfbf) != 0x10c)  // pagemap bits: https://www.kernel.org/doc/Documentation/vm/pagemap.txt
             fatal("Page %d not present (pfn 0x%016llx)\n", i, pfn);
         page_map[i].physaddr = (uint32_t)pfn << PAGE_SHIFT | 0x40000000;
-//        printf("  %2d: %8p ==> 0x%08x [0x%016llx]\n", i, page_map[i].virtaddr, page_map[i].physaddr, pfn);
+        //printf("  %2d: %8p ==> 0x%08x [0x%016llx]\n", i, page_map[i].virtaddr, page_map[i].physaddr, pfn);
     }
-
     // GPIO4 needs to be ALT FUNC 0 to otuput the clock
     gpio_reg[GPFSEL0] = (gpio_reg[GPFSEL0] & ~(7 << 12)) | (4 << 12);
 
@@ -360,7 +357,6 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
     }
     cbp--;
     cbp->next = mem_virt_to_phys(virtbase);
-
     // Here we define the rate at which we want to update the GPCLK control 
     // register.
     //
@@ -379,7 +375,6 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
     float divider = (500000./(2*228*(1.+ppm/1.e6)));
     uint32_t idivider = (uint32_t) divider;
     uint32_t fdivider = (uint32_t) ((divider - idivider)*pow(2, 12));
-    
     printf("ppm corr is %d, divider is %.4f (%d + %d*2^-12) [nominal 1096.4912]\n", 
                 ppm, divider, idivider, fdivider);
 
@@ -401,7 +396,6 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
     pwm_reg[PWM_CTL] = PWMCTL_USEF1 | PWMCTL_PWEN1;
     udelay(10);
     
-
     // Initialise the DMA
     dma_reg[DMA_CS] = BCM2708_DMA_RESET;
     udelay(10);
@@ -412,7 +406,6 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
 
     
     uint32_t last_cb = (uint32_t)ctl->cb;
-
     // Data structures for baseband data
     float data[DATA_SIZE];
     int data_len = 0;
@@ -428,12 +421,11 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
     uint16_t count = 0;
     uint16_t count2 = 0;
     int varying_ps = 0;
-    
     if(ps) {
         set_rds_ps(ps);
-        printf("PI: %04X, PS: \"%s\"\n", pi, ps);
+        printf("PI: %04X\nPS: \"%s\"\n", pi, ps);
     } else {
-        printf("PI: %04X, PS: <Varying>\n", pi);
+        printf("PI: %04X\nPS: <Varying>\n", pi);
         varying_ps = 1;
     }
     printf("RT: \"%s\"\n", rt);
@@ -448,9 +440,7 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
         }
     }
     
-    
     printf("Starting to transmit on %3.1f MHz.\n", carrier_freq/1e6);
-
     for (;;) {
         // Default (varying) PS
         if(varying_ps) {
@@ -465,7 +455,6 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
             }
             count++;
         }
-        
         if(control_pipe && poll_control_pipe() == CONTROL_PIPE_PS_SET) {
             varying_ps = 0;
         }
@@ -476,7 +465,6 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
         int last_sample = (last_cb - (uint32_t)virtbase) / (sizeof(dma_cb_t) * 2);
         int this_sample = (cur_cb - (uint32_t)virtbase) / (sizeof(dma_cb_t) * 2);
         int free_slots = this_sample - last_sample;
-
         if (free_slots < 0)
             free_slots += NUM_SAMPLES;
 
@@ -489,7 +477,7 @@ int tx(uint32_t carrier_freq, char *audio_file, uint16_t pi, char *ps, char *rt,
                 data_len = DATA_SIZE;
                 data_index = 0;
             }
-            
+
             float dval = data[data_index] * (DEVIATION / 10.);
             data_index++;
             data_len--;
@@ -519,7 +507,7 @@ int main(int argc, char **argv) {
     uint32_t carrier_freq = 107900000;
     char *ps = NULL;
     char *rt = "PiFmRds: live FM-RDS transmission from the RaspberryPi";
-    uint16_t pi = 0x1234;
+    uint16_t pi = 0x83D1;
     int16_t ppm = 0;
     
     
@@ -559,6 +547,5 @@ int main(int argc, char **argv) {
             "                  [-ps ps_text] [-rt rt_text] [-ctl control_pipe]\n", arg);
         }
     }
-    
     tx(carrier_freq, audio_file, pi, ps, rt, ppm, control_pipe);
 }
